@@ -1,0 +1,190 @@
+---
+title: "Reproducable Research - Peer Assignment 2"
+author: "Marcus Ross"
+date: "27. September 2015"
+output: pdf_document
+---
+  
+How major weather events impact the US - In the years 2001 to 2011
+==========================================================
+  
+## Note
+This document is made as an assignment of a Coursera course [Reproducible Research](https://www.coursera.org/course/repdata). 
+I done this assignment by using [RMarkdown](http://rmarkdown.rstudio.com/) and [Knitr](http://yihui.name/knitr/) for creation of this report. The sourcecode is also available at [github](https://github.com/zahlenhelfer/Reproducible-Research-peer-assignment-2/blob/master/Assignment2.Rmd)
+
+## Synopsis
+This report is an analyses of the impact from storms and other weather events. The area of interest is the public health and economy of the United States. The raw sourcedata is from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. We try to find the type of events which did the most impact from 2001 to 2011 timeframe.
+
+## The Data Processing
+The following packages needs to be installed:
+knitr, dplyr, lubridate, quantmod, xtable
+
+``` {r knitr_options, echo=FALSE, warning=FALSE, include=FALSE}
+require(knitr)
+opts_chunk$set(fig.path="figures/an-")
+```
+```{r load_libraries, echo=FALSE, warning=FALSE, include=FALSE}
+require(dplyr)
+require(lubridate)
+require(quantmod)
+require(xtable)
+```
+
+### Import and read data
+All the data is from[U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database](http://www.ncdc.noaa.gov/stormevents/). It contains data from major storms and weather events in the United States from 1950 to November 2011. The datapackets will including location and damage as well as property damage.
+
+You can download the data from: [repdata-data-StormData.csv.bz2](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) [compressed: 47Mb/ umcompressed: 561mb].
+
+Unzip the data and then read it:
+```{r read_storm_data, cache=TRUE}
+storm_data_raw <- read.csv(bzfile("repdata-data-StormData.csv.bz2"))
+```
+
+Take the dimension of the data and output the first rows:
+```{r check_storm_data, cache=TRUE}
+storm_data_dim <- dim(storm_data_raw)
+storm_data_dim
+head(storm_data_raw)
+```
+
+cases of events: `r storm_data_dim[1]`. 
+cases of variables per event: `r storm_data_dim[2]`.
+
+### List of variables: 
+
+#### BGN_DATE
+The start date of an event. I use it to extract the datepart year. Then filter the data from 2001 to 2011. Roughfly ten years should be good data for the analysis.
+
+#### EVTYPE
+There are 985 event types in the dataset. NOAA storm database description reports 48 event type.
+
+#### FATALITIES
+The Number of fatalities that are caused by the event.
+
+#### INJURIES
+The Number of injuries caused by the event.
+
+#### PROPDMG
+The Damages to properties.
+
+#### PROPDMGEXP
+The Damages to properties.
+
+#### CROPDMG
+The Damages to crop
+
+#### CROPDMGEXP
+The Damages to crop with exponent
+
+### a subset of the data in health and economic impact analysis against weather event
+```{r cache=TRUE}
+# get only the columns with the relevant data 
+relevant_cols <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+damage_data <- storm_data_raw[relevant_cols]
+```
+
+## Preparing the property damage data
+
+### explore the property exponent
+```{r cache=TRUE}
+unique(damage_data$PROPDMGEXP)
+```
+
+#### setting the property exponent according the data (e.g. 1000 for K)
+```{r cache=TRUE}
+damage_data$PROPEXP[damage_data$PROPDMGEXP == ""] <- 1
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "+"] <- 0
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "-"] <- 0
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "0"] <- 1
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "1"] <- 10
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "2"] <- 100
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "3"] <- 1000
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "4"] <- 10000
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "5"] <- 1e+05
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "6"] <- 1e+06
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "7"] <- 1e+07
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "8"] <- 1e+08
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "?"] <- 0
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "B"] <- 1e+09
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "H"] <- 100
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "K"] <- 1000
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "M"] <- 1e+06
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "h"] <- 100
+damage_data$PROPEXP[damage_data$PROPDMGEXP == "m"] <- 1e+06
+
+#### compute the monetary value of the property damage
+damage_data$PROPDMGVAL <- damage_data$PROPDMG * damage_data$PROPEXP
+```
+
+#### explore the crop exponent data
+```{r cache=TRUE}
+unique(damage_data$CROPDMGEXP)
+```
+
+#### setting property exponent according the data (e.g. 1000 for K)
+```{r cache=TRUE}
+damage_data$CROPEXP[damage_data$CROPDMGEXP == ""] <- 1
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "0"] <- 1
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "2"] <- 100
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "?"] <- 0
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "B"] <- 1e+09
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "K"] <- 1000
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "M"] <- 1e+06
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "k"] <- 1000
+damage_data$CROPEXP[damage_data$CROPDMGEXP == "m"] <- 1e+06
+```
+
+#### now compute monetary value of the crop damage
+```{r cache=TRUE}
+damage_data$CROPDMGVAL <- damage_data$CROPDMG * damage_data$CROPEXP
+```
+
+### Aggregate damagedata by event type
+```{r cache=TRUE}
+damages_fatal   <- aggregate(FATALITIES ~ EVTYPE, data = damage_data, FUN = sum)
+damages_injury  <- aggregate(INJURIES ~ EVTYPE,   data = damage_data, FUN = sum)
+damages_property <- aggregate(PROPDMGVAL ~ EVTYPE, data = damage_data, FUN = sum)
+damages_crop <- aggregate(CROPDMGVAL ~ EVTYPE, data = damage_data, FUN = sum)
+```
+
+## The Results
+
+### Which event types are the most harmful with respect to population health
+```{r cache=TRUE}
+# get top10 for events with fatalities/injuries
+top10_fatal <- damages_fatal[order(-damages_fatal$FATALITIES), ][1:10, ]
+top10_injury <- damages_injury[order(-damages_injury$INJURIES), ][1:10, ]
+```
+
+```{r cache=TRUE}
+# draw charts
+par(mfrow = c(1, 2), mar = c(12, 4, 4, 4))
+barplot(top10_fatal$FATALITIES, las = 3, names.arg = top10_fatal$EVTYPE, main = "Top 10 Fatal Weather events ", 
+        ylab = "number of fatals", col = "red")
+barplot(top10_injury$INJURIES, las = 3, names.arg = top10_injury$EVTYPE, main = "Top 10 Injuries Weather events", 
+        ylab = "number of injuries", col = "yellow")
+```
+
+Interesting Fact that **Tornardos** are the most harmful weather events. This is for both in fatalities and injuries. 
+
+### Which event types have the biggest economic damages?
+
+```{r cache=TRUE}
+# get top10 for events with property/crop damages
+top10_property <- damages_property[order(-damages_property$PROPDMGVAL), ][1:10, ]
+top10_crop <- damages_crop[order(-damages_crop$CROPDMGVAL), ][1:10, ]
+```
+
+```{r cache=TRUE}
+# draw charts
+par(mfrow = c(1, 2), mar = c(12, 4, 4, 4))
+barplot(top10_property$PROPDMGVAL/(10^9), las = 3, names.arg = top10_property$EVTYPE, 
+        main = "Top 10 Events (Property Damage)", ylab = "Damages in billions of $", 
+        col = "grey")
+barplot(top10_crop$CROPDMGVAL/(10^9), las = 3, names.arg = top10_crop$EVTYPE, 
+        main = "Top 10 Events (Crop Damage)", ylab = "Damages in billions of $", 
+        col = "grey")
+```
+
+As a resul the biggest damage will be **Flood** then by hurricane/typhoon and tornado
+And as a second result the biggest damage through crop is **Draught** then by flood and river flood
